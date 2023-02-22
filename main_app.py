@@ -135,5 +135,6 @@ with transl_exp:
     else:
         c2.code(transl_out_text)
 
+###------BioGPT SECTION------###
+
 st.write(st.session_state)
-st.markdown(f"TEST : { st.session_state['auto_lang'] }")
