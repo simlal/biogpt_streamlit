@@ -1,7 +1,7 @@
 # import torch
 import streamlit as st
-import translators as ts
-import translators.server as tss
+# import translators as ts
+# import translators.server as tss
 
 # Locally hardcoded selection with DeepL and Google
 from translators_langs import avail_transl, lang_map
@@ -41,6 +41,8 @@ st.markdown(
 )
 
 # Translate input section
+st.title("Text translation (optional)")
+
 transl_exp = st.expander(label="Use a translator if input text in a language other than English 👇", expanded=True)
 c1, c2, = transl_exp.columns((1,1.5))
 
@@ -52,7 +54,8 @@ with transl_exp:
         "Select a translator",
         options=avail_transl,
         horizontal=True,
-        key="transl_choice"
+        index=1,
+        key="transl_choice",
     )
     c1.markdown("<br>**Select languages**", unsafe_allow_html=True)
     # Automatic lang finder    
@@ -90,15 +93,16 @@ with transl_exp:
     )
     check_input(st.session_state["transl_in_text"])   # warning + error
     
-    # Clear text button
+    ###---On left col (with syntax is sequential)---###
     clear_disabled = True
     if st.session_state["transl_in_text"] != "":
         clear_disabled = False 
     
-    c2.button("Reset input", disabled=clear_disabled, key="clear_button")
+    c1.button("Reset web app", disabled=clear_disabled, key="clear_button")
     
     if st.session_state["clear_button"]:
         st.experimental_rerun()
+    ###---end reset page---###
     
     # Output translate components    
     
