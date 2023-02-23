@@ -178,13 +178,9 @@ lang_map = {
 biogpt_models = [
     "BioGPT",
     "BioGPT-Large",
-    "BioGPT-QA-PubMedQA-BioGPT",
-    "BioGPT-QA-PubMEDQA-BioGPT-Large",
-    "BioGPT-RE-BC5CDR",
-    "BioGPT-RE-DDI",
-    "BioGPT-RE-DTI",
-    "BioGPT-DC-HoC"
+    "BioGPT-Large-PubMedQA"
 ]
+
 # k:example v:[in_text, min_seq, max_seq, num_seq_returned, model, output]
 examples = {
     "example1" : ["Covid is", 100, 1024, 1, biogpt_models[0], "'Covid is a pandemic caused by a novel coronavirus (SARS-CoV-2) that was first identified in Wuhan, Hubei Province, China, in December 2019, and has since spread rapidly throughout the world, including the United States (US), Canada, and the United Kingdom (UK), as well as the United States of America (USA), the United States of Mexico (USA-Mexico), and the United States of South America (USA-SA).'"],
