@@ -1,10 +1,12 @@
 # import torch
 import streamlit as st
-# import translators as ts
-# import translators.server as tss
+import translators as ts
+import translators.server as tss
 
 # Locally hardcoded selection with DeepL and Google
-from translators_langs import avail_transl, lang_map
+from utils import avail_transl, lang_map, biogpt_models
+
+
 
 def get_langs(langmap, transl_choice):
     translator_langs = langmap[transl_choice.lower()]
@@ -21,16 +23,33 @@ def check_input(in_text):
     # st.warning("Even though the translator API supports 5000 max chars, BioGPT limits input prompt to 2048", icon="🔥")
     
     if in_text_length == 0:
-        c2.warning(
+        return c2.warning(
             "Please enter some text and use CTL+Enter to confirm!", icon="🔥"
         )
     elif in_text_length > 2048 :
-        c2.error("Input text prompt must be less than 2048 characters long")
+        return c2.error("Input text prompt must be less than 2048 characters long")
+    else:
+        return c2.markdown(":green[OK, ready to translate!]")
 
 def translate_query(in_text, translator, lang_in, lang_out):
     
     out_text = ts.translate_text(in_text, translator, lang_in, lang_out)
     return out_text
+
+def disable_form():
+    st.session_state["disabled"] = True
+    return st.session_state["disabled"]
+    
+
+
+def check_min_max_seq_compatibility(min_slider_val, max_slider_val):
+    if min_slider_val > max_slider_val:
+        return st.error("Enter a minimum sequence length smaller than the maximum sequence length", icon="🚨")
+    # else:
+    #     return st.markdown(":green[Good to go!]")
+    
+def generate_text(model, min_seq_len, max_seq_len, num_seq, in_text):
+    pass
 
 # st app 
 st.set_page_config(layout="wide")
@@ -98,7 +117,7 @@ with transl_exp:
     if st.session_state["transl_in_text"] != "":
         clear_disabled = False 
     
-    c1.button("Reset web app", disabled=clear_disabled, key="clear_button")
+    c1.button("Reset values/app", disabled=clear_disabled, key="clear_button")
     
     if st.session_state["clear_button"]:
         st.experimental_rerun()
@@ -140,5 +159,58 @@ with transl_exp:
         c2.code(transl_out_text)
 
 ###------BioGPT SECTION------###
+st.title("BioGPT : biomedical text generation and mining")
+
+# Left col = params / right col = gpt output
+biogpt_cont = st.container()
+c1, c2 = biogpt_cont.columns((1,2))
+
+with biogpt_cont:
+    model_params = c1.form(key="biogpt_form")
+    with model_params:
+        model_choice = st.selectbox("Select the pre-trained model", biogpt_models)
+        min_slider = st.slider(
+            label="Minimum sequence output length",
+            min_value=25,
+            max_value=250,
+            value=50,
+            step=5,
+            help="Capped between 25-250 seq len for usability"
+        )
+        max_slider = st.slider(
+            label="Max sequence output length",
+            min_value=50,
+            max_value=500,
+            value=250,
+            step=5,
+            help="Use a max sequence > than min sequence"
+        )
+        num_seq_slider = st.slider(
+            label="Number of returned sequences",
+            min_value=1,
+            max_value=5,
+            value=1,
+            step=1
+        )
+        
+        # len_answer_slider = st.slider
+        if "disabled" not in st.session_state:
+            st.session_state["disabled"] = False
+        submit_params = st.form_submit_button(
+            "Generate text",
+            type="primary",
+            on_click=disable_form,
+            disabled=st.session_state["disabled"]
+        )
+        check_min_max_seq_compatibility(min_slider_val=min_slider, max_slider_val=max_slider)
+        # Check min_max params comptability
+        if submit_params:
+            # check_min_max_seq_compatibility(min_slider_val=min_slider, max_slider_val=max_slider)
+            st.info(
+                f"Generating text(s) sequence(s) ({min_slider} - {max_slider} characters) using {model_choice}..."
+            )
+        
+        # Input output generation
+            
 
 st.write(st.session_state)
