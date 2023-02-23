@@ -1,10 +1,15 @@
 import torch
+from transformers import pipeline, set_seed
+from transformers import BioGptTokenizer, BioGptForCausalLM
+
 import streamlit as st
 import translators as ts
-import translators.server as tss
+import asyncio
+import datetime
+import pandas as pd
 
 # Locally hardcoded selection with DeepL and Google
-from utils import avail_transl, lang_map, biogpt_models
+from utils import avail_transl, lang_map, biogpt_models, examples
 
 
 
@@ -17,7 +22,7 @@ def get_default_outlang_index(transl_choice):
     default_out_index = int(default_out[0])
     return default_out_index
 
-def check_input(in_text):
+def check_input_transl(in_text):
     in_text_length = len(in_text)
     # base warning
     # st.warning("Even though the translator API supports 5000 max chars, BioGPT limits input prompt to 2048", icon="🔥")
@@ -48,16 +53,84 @@ def check_min_max_seq_compatibility(min_slider_val, max_slider_val):
     # else:
     #     return st.markdown(":green[Good to go!]")
     
-def check_input_predict():
+def check_input_predict(submit_state=False):
+    if not submit_state:
+        if st.session_state["pred_in_text"] is None:
+            c1.warning("Make sure you have some text either from translator or manually added", icon="🔥")
+    else:
+        if st.session_state["pred_in_text"] is None or st.session_state["pred_in_text"] == "":
+            c1.error("Make sure you have some input for text generation", icon="🚨")
+            st.stop()
     
+def setup_model(model_choice):
+    model_dict = {
+        "BioGPT" : "microsoft/biogpt",
+        "BioGPT-Large" : "microsoft/BioGPT-Large",
+        "BioGPT-Large-PubMedQA" : "microsoft/BioGPT-Large-PubMedQA"
+    }
+    model_choice = model_dict[model_choice]
     
-def setup_model(model, min_seq_len, max_seq_len, num_seq, in_text):
-    pass
+    tokenizer = BioGptTokenizer.from_pretrained(model_choice)
+    model = BioGptForCausalLM.from_pretrained(model_choice)
+    return tokenizer, model
 
-def generate_text_from_model():
-    pass
+async def generate_text_from_model(model_choice, min_seq_val, max_seq_val, num_seq_val, input_text):
+    with st.spinner("In progress..."):
+        start = datetime.datetime.now()
+        tokenizer, model = setup_model(model_choice)
+        inputs = tokenizer(input_text, return_tensors="pt")
+        
+        set_seed(42)
+        
+        with torch.no_grad():
+            beam_output = model.generate(**inputs,
+                                        min_length=min_seq_val,
+                                        max_length=max_seq_val,
+                                        num_beams=num_seq_val,
+                                        early_stopping=True
+                                        )
+        output = tokenizer.decode(beam_output[0], skip_special_tokens=True)
+        end = datetime.datetime.now()
+        time_diff = end - start
+        return output, time_diff.seconds
 
-# st app 
+#! STOPWATCH TO TIME FUNCT
+# async def watch():
+#     with c2.empty():
+#         now = 0
+#         while True: 
+#             st.markdown(
+#                 f"<p style='color:grey'>Generating text output...<strong>(Elapsed time = {now} seconds)</strong></p>",
+#                 unsafe_allow_html=True
+#             )
+#             await asyncio.sleep(1)
+#             now += 1
+#             if stop_generate:
+#                 break
+
+#!DEPRECATED                     
+# async def call_watch_predict():
+#     # all_tasks = set()
+#     now = 0
+#     done_loop = False
+#     task1 = asyncio.create_task(watch(now, done_loop))
+#     task2 = asyncio.create_task(generate_text_from_model(
+#         model_choice=model_choice,
+#         min_seq_val=min_slider,
+#         max_seq_val=max_slider,
+#         num_seq_val=num_seq_slider,
+#         input_text=st.session_state["pred_in_text"],
+#     ))
+#     # await task1
+#     await task2
+#         done_loop = True
+#         task1.cancel()
+#     return task2.result()
+
+
+
+####---------------------STREAMLIT---------------------####
+
 st.set_page_config(layout="wide")
 # Main title
 st.markdown(
@@ -84,7 +157,7 @@ with transl_exp:
     )
     c1.markdown("<br>**Select languages**", unsafe_allow_html=True)
     # Automatic lang finder    
-    c1.checkbox("Find language automatically", key="auto_lang", value=True)
+    c1.checkbox("Find language automatically", key="auto_lang", value=False)
 
     # Input lang selection base on translator choice
     c1.selectbox(
@@ -116,7 +189,7 @@ with transl_exp:
         placeholder="Enter the text you want to translate here",
         key="transl_in_text"
     )
-    check_input(st.session_state["transl_in_text"])   # warning + error
+    check_input_transl(st.session_state["transl_in_text"])   # warning + error
     
     ###---On left col (with syntax is sequential)---###
     clear_disabled = True
@@ -185,7 +258,7 @@ with biogpt_cont:
             label="Minimum sequence output length",
             min_value=25,
             max_value=250,
-            value=100,
+            value=50,
             step=5,
             help="Capped between 25-250 seq len for usability"
         )
@@ -205,7 +278,7 @@ with biogpt_cont:
             step=1
         )
         # Input/output section
-        c2.markdown("**Input**")
+        c2.markdown("#### Input")
         # Initialize session state with same key as txt area
         if "pred_in_text" not in st.session_state:
                 st.session_state["pred_in_text"] = None
@@ -229,29 +302,60 @@ with biogpt_cont:
         # Disable on submit for generate button
         if "disabled" not in st.session_state:
             st.session_state["disabled"] = False
-        submit_params = st.form_submit_button(
-            "Generate text",
-            type="primary",
-            on_click=disable_form,
-            disabled=st.session_state["disabled"]
-        )
+        subcol1, subcol2 = st.columns(2)
+        with subcol1:
+            submit_params = st.form_submit_button(
+                "Generate text",
+                type="primary",
+                on_click=disable_form,
+                disabled=st.session_state["disabled"],
+                help="Reload the page for a another prompt"
+            )
+        with subcol2:
+            stop_generate = st.form_submit_button(
+                "Stop generation",
+                type="secondary",
+                disabled=not st.session_state["disabled"]
+                )
         # Check min_max params comptability for size
         check_min_max_seq_compatibility(min_slider_val=min_slider, max_slider_val=max_slider)
+        check_input_predict(submit_state=False)
         
-            
+        # Output generation
+        c2.markdown("---")
+        c2.markdown("#### Output")   
+        
         
         if not submit_params:
-            pass
+            c2.code(body="...", language=None)
         else:
-            st.info(
-                f"Generating text(s) sequence(s) ({min_slider} - {max_slider} characters) using {model_choice}..."
+            # Input checkpoint to avoid querying the model
+            check_input_predict(submit_state=True)
+            
+            # Placeholders and timewatchwhile generating
+            c1.info(f"Generating text(s) sequence(s) (length between {min_slider} and {max_slider}) using {model_choice}...")
+            output, total_time = asyncio.run(generate_text_from_model(
+                model_choice=model_choice,
+                min_seq_val=min_slider,
+                max_seq_val=max_slider,
+                num_seq_val=num_seq_slider,
+                input_text=st.session_state["pred_in_text"]
+            ))
+            # output to screen
+            c2.markdown(
+                f"<p style='color:#4295f5; font-size:20px;'><strong>{output}</strong></p>",
+                unsafe_allow_html=True
             )
-            #TODO FUNCTION CALL
-        
-        # Input output generation
-        c2.markdown("---")
-        c2.markdown(":blue[**Output**]")
-        
-        
-
-st.write(st.session_state)
+            # Time to complete
+            c2.markdown(
+                f"<p style='color:grey'>Generated text output in <strong>{total_time} seconds</strong></p>",
+                unsafe_allow_html=True
+            )
+df_ex = pd.DataFrame.from_dict(
+    examples, orient="index", columns=[
+        "Prompt", "min_seq_len", "max_seq_len", "num_seq_returned", "Model", "Output"
+        ]
+    )
+st.markdown("<br><br>", unsafe_allow_html=True)
+styles = [{'selector': 'tr:hover', 'props': [('background-color', '#848fc0')]}]
+st.markdown(df_ex.style.set_table_styles(styles).to_html(), unsafe_allow_html=True)
