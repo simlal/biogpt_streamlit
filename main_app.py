@@ -1,4 +1,4 @@
-# import torch
+import torch
 import streamlit as st
 import translators as ts
 import translators.server as tss
@@ -48,7 +48,13 @@ def check_min_max_seq_compatibility(min_slider_val, max_slider_val):
     # else:
     #     return st.markdown(":green[Good to go!]")
     
-def generate_text(model, min_seq_len, max_seq_len, num_seq, in_text):
+def check_input_predict():
+    
+    
+def setup_model(model, min_seq_len, max_seq_len, num_seq, in_text):
+    pass
+
+def generate_text_from_model():
     pass
 
 # st app 
@@ -78,7 +84,7 @@ with transl_exp:
     )
     c1.markdown("<br>**Select languages**", unsafe_allow_html=True)
     # Automatic lang finder    
-    c1.checkbox("Find language automatically", key="auto_lang")
+    c1.checkbox("Find language automatically", key="auto_lang", value=True)
 
     # Input lang selection base on translator choice
     c1.selectbox(
@@ -138,14 +144,17 @@ with transl_exp:
         c2.write(f"**Translated output to English with automatic detection**")
 
     # Translate action        
+    if "transl_out_text" not in st.session_state:
+        st.session_state["transl_out_text"] = None
+    
     if st.session_state["translate_button"]:
         if st.session_state["auto_lang"]:
-            transl_out_text = ts.translate_text(
+            st.session_state["transl_out_text"] = ts.translate_text(
                 query_text=st.session_state["transl_in_text"],
                 translator=st.session_state["transl_choice"].lower()
             )
         else:
-            transl_out_text = translate_query(
+            st.session_state["transl_out_text"] = translate_query(
                 st.session_state["transl_in_text"],
                 st.session_state["transl_choice"].lower(),
                 st.session_state["transl_lang_in"],
@@ -153,10 +162,13 @@ with transl_exp:
             )
     # Awaiting translate action or output        
     if not st.session_state["translate_button"]:
-        c2.code(f"\nAwaiting translation...\n"
+        placeholder_out_transl = c2.code(
+            body="Awaiting translation...",
+            language=None    
         )
+        st.session_state["transl_out_text"] = None
     else:
-        c2.code(transl_out_text)
+        c2.code(st.session_state["transl_out_text"], language=None)
 
 ###------BioGPT SECTION------###
 st.title("BioGPT : biomedical text generation and mining")
@@ -173,15 +185,15 @@ with biogpt_cont:
             label="Minimum sequence output length",
             min_value=25,
             max_value=250,
-            value=50,
+            value=100,
             step=5,
             help="Capped between 25-250 seq len for usability"
         )
         max_slider = st.slider(
             label="Max sequence output length",
             min_value=50,
-            max_value=500,
-            value=250,
+            max_value=2048,
+            value=500,
             step=5,
             help="Use a max sequence > than min sequence"
         )
@@ -192,8 +204,29 @@ with biogpt_cont:
             value=1,
             step=1
         )
+        # Input/output section
+        c2.markdown("**Input**")
+        # Initialize session state with same key as txt area
+        if "pred_in_text" not in st.session_state:
+                st.session_state["pred_in_text"] = None
         
-        # len_answer_slider = st.slider
+        # Checkbox validation to get translation output
+        c2.checkbox("Use output from translation", value=True, key="predict_transl_out_check")
+        if not st.session_state["predict_transl_out_check"]:
+            c2.text_area(
+                label=f"Enter text here for generation with {model_choice}",
+                placeholder="Covid is", 
+                key="pred_in_text"
+            )
+        else:       
+            if st.session_state["transl_out_text"] is None:
+                c2.warning("If checking this option, make sure to perform translation before", icon="🔥")
+            else:
+                c2.code(st.session_state["transl_out_text"], language=None)
+                st.session_state["pred_in_text"] = st.session_state["transl_out_text"]
+                
+        
+        # Disable on submit for generate button
         if "disabled" not in st.session_state:
             st.session_state["disabled"] = False
         submit_params = st.form_submit_button(
@@ -202,15 +235,23 @@ with biogpt_cont:
             on_click=disable_form,
             disabled=st.session_state["disabled"]
         )
+        # Check min_max params comptability for size
         check_min_max_seq_compatibility(min_slider_val=min_slider, max_slider_val=max_slider)
-        # Check min_max params comptability
-        if submit_params:
-            # check_min_max_seq_compatibility(min_slider_val=min_slider, max_slider_val=max_slider)
+        
+            
+        
+        if not submit_params:
+            pass
+        else:
             st.info(
                 f"Generating text(s) sequence(s) ({min_slider} - {max_slider} characters) using {model_choice}..."
             )
+            #TODO FUNCTION CALL
         
         # Input output generation
-            
+        c2.markdown("---")
+        c2.markdown(":blue[**Output**]")
+        
+        
 
 st.write(st.session_state)
