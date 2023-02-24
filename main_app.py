@@ -83,16 +83,17 @@ async def generate_text_from_model(model_choice, min_seq_val, max_seq_val, num_s
         set_seed(42)
         
         with torch.no_grad():
-            beam_output = model.generate(**inputs,
+            beam_outputs = model.generate(**inputs,
                                         min_length=min_seq_val,
                                         max_length=max_seq_val,
-                                        num_beams=num_seq_val,
+                                        num_beams=5,
+                                        num_return_sequences=num_seq_val,
                                         early_stopping=True
                                         )
-        output = tokenizer.decode(beam_output[0], skip_special_tokens=True)
+        decoded_outputs =[{i: tokenizer.decode(beam_output, skip_special_tokens=True)} for i, beam_output in enumerate(beam_outputs)]
         end = datetime.datetime.now()
         time_diff = end - start
-        return output, time_diff.seconds
+        return decoded_outputs, time_diff.seconds
 
 #! STOPWATCH TO TIME FUNCT
 # async def watch():
@@ -334,18 +335,25 @@ with biogpt_cont:
             
             # Placeholders and timewatchwhile generating
             c1.info(f"Generating text(s) sequence(s) (length between {min_slider} and {max_slider}) using {model_choice}...")
-            output, total_time = asyncio.run(generate_text_from_model(
+            decoded_outputs, total_time = asyncio.run(generate_text_from_model(
                 model_choice=model_choice,
                 min_seq_val=min_slider,
                 max_seq_val=max_slider,
                 num_seq_val=num_seq_slider,
                 input_text=st.session_state["pred_in_text"]
             ))
-            # output to screen
-            c2.markdown(
-                f"<p style='color:#4295f5; font-size:20px;'><strong>{output}</strong></p>",
-                unsafe_allow_html=True
-            )
+            # decoded_output to screen
+            for output in decoded_outputs:
+                for num_answer, op in output.items():    
+                    c2.markdown(
+                        f"""
+                        <p style='font-size:20px'>
+                            <span style='color:grey'><strong>Answer #{num_answer + 1} :</span>
+                            <span style='color:#4295f5'>{op}</strong></span>
+                        </p>
+                        """,
+                        unsafe_allow_html=True
+                    )
             # Time to complete
             c2.markdown(
                 f"<p style='color:grey'>Generated text output in <strong>{total_time} seconds</strong></p>",
